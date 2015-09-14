@@ -1,0 +1,258 @@
+\ This mpc file was adapted from a
+\ tutorial on Med-PC Programmer's guide
+\ File name: RFO_CRF_30_014.mpc
+\ Implements a CRF [continuous reinforcement] schedule, 30 r
+\ Date 20/06/2012
+\ Developed by Rodrigo F Oliveira
+
+
+
+\++++ Output Session ++++
+^LeftLeverFrontWallOut = 1
+^CenterLeverBackWallOut = 4
+^RewardSucrose = 13
+^HouseLight = 11
+
+\++++ Input Session ++++
+^LeftLeverFrontWall = 1
+^CenterLeverBackWall = 4
+^HeadEntry = 6
+^Lick = 7
+
+\++++ TTL Session ++++
+^TTLsucrose=20
+^TTLLever4=21
+^TTLHeadentry=22
+^TTLLick=23
+
+DISKCOLUMNS = 5
+DISKOPTIONS = FULLHEADERS, FORMFEEDS
+DISKFORMAT = 9.4
+DISKVARS = A, B, D, E, F, H, X, C
+
+\++++++++++++
+\ Defined variables
+\ A Number of Responses in the session
+\ B Number of HeadEntries in the session
+\ D Number of Rewards in the session
+\ E Number of Licks in the session
+\ F Average Goal Frequency (in Hz)        (criteria to deliver reward)
+\ G Average Goal IRT in "                 (criteria to deliver reward)
+\ H Tolerance  in Hz  (+/-)               (criteria to deliver reward)
+\ I Tolerance in "    (+/-)               (criteria to deliver reward)
+\ J Subscript for the IRT Array C.
+\ K Tolerance (normalized [0:1]*I)        (criteria to deliver reward)
+\ T Clock Ticks for IRT's.  Resolution = 0.01 second.
+\ P Actual number of Responses within sequence
+\ M Holds the sum of all IRT within a sequence until a headentry
+\ N Clock Ticks for the display.  Resolution = 1 second.
+\ X Number of responses to get a reward   (criteria to deliver reward)
+\ O Maximum session time in minutes       (criteria to end session)
+\ N Session timer
+\ Q Maximum rewards                       (criteria to end session)
+\ W Duration in " for reward delivery after last press in sequence
+\ Z Holds the sum of all IRT within a sequence until X presses
+
+\++++++++++++
+\ Defined arrays
+DIM C = 15000  \ C(), IRT array (save 'all' events in the session)
+DIM R = 135    \ R(), IRT array (within a sequence)
+
+\++++++++++++
+\ Sets:
+\ W Duration in " for reward delivery after last press in sequence
+\ O Maximum session time in minutes
+\ Q Maximum rewards in session
+\ X Number of responses to get a reward   (criteria to deliver reward)
+\ F Average goal frequency (in Hz)        (criteria to deliver reward)
+\ G Average goal IRT in "                 (criteria to deliver reward)
+\ H Tolerance  in Hz  (+/-)               (criteria to deliver reward)
+\ I Tolerance in "    (+/-)               (criteria to deliver reward)
+\ K Tolerance (normalized [0:1]*I)        (criteria to deliver reward)
+S.S.1,
+S1,
+ #START: ON ^HouseLight; ; ON ^CenterLeverBackWallOut;
+         SET W = 2.0";
+         SET O = 90;
+         SET Q = 30;
+         SET X = 4;
+         SET F = 3;
+         SET H = 2.0;
+         SET G = (1/F);
+         SET K = 1.0;
+         SET I = (G*K);  ---> S2
+
+S2,
+  #R^CenterLeverBackWall: ---> S3
+
+S3,
+  #R^HeadEntry: Z2 ---> S2
+
+\++++++++++++
+\ Response Count and Display
+S.S.2,
+S1,
+ #START: SHOW 1,Responses,A ---> S2
+S2,
+ #R^CenterLeverBackWall: ADD A; SHOW 1,Responses,A ---> SX
+
+\++++++++++++
+\ Reward Delivery, Counter and Display
+S.S.3,
+S1,
+ #Z1: ON ^RewardSucrose; ADD D; SHOW 2,Rewards,D ---> S2
+S2,
+ W#T: OFF ^RewardSucrose ---> S1
+
+\++++++++++++
+\ Increment Time t for IRT and Event Array C, and Trial Array R
+\ General Timer
+S.S.4,
+S1,
+ #START: ---> S2
+S2,
+ 0.01": SET T = T + 0.01 ---> SX
+
+\++++++++++++
+\ Record 'Lick' in C
+S.S.6,
+S1,
+ #START:  SHOW 4, Lick, E;---> S2
+S2,
+ #R^Lick: ADD E; SHOW 4, Lick, E;
+               SET C(J) = T + 0.0011, T = 0; ADD J;
+               IF J >= 15000 [@True, @False]
+                 @True: ---> S1
+                 @False: SET C(J) = -987.987 ---> SX
+
+\++++++++++++
+\ Record 'HeadEntry' in C
+S.S.7,
+S1,
+ #START: SHOW 5, Headentry, B  ---> S2
+S2,
+ #R^HeadEntry: ADD B; SHOW 5, Headentry, B;
+               SET C(J) = T + 0.0012, T = 0; ADD J;
+               IF J >= 15000 [@True, @False]
+                 @True:  ---> S1
+                 @False: SET C(J) = -987.987 ---> SX
+
+\++++++++++++
+\ Record 'CenterLeverBackWall' in C and P
+\ Trial timer, sequence counter 2
+S.S.8,
+S1,
+ #START: ---> S2
+S2,
+ #R^CenterLeverBackWall: SET R(P) = T; ADD P;  SHOW 3, ResponsesInSeq, P;
+                SET C(J) = T + 0.0010, T = 0; ADD J;
+                 IF J >= 15000 [@True, @False]
+                               @True: ---> S1
+                               @False: SET C(J) = -987.987 ---> SX
+\++++++++++++
+\ Set Reinforcement Mark For Soft Cum. Recorder
+S.S.9,  
+S1,
+  #START: ---> S2
+
+S2,
+  #Z1: SET C(J) = T + 0.0020, T = 0; ADD J;
+       IF J >= 15000 [@True, @False]
+          @True: ---> S1
+          @False: SET C(J) = -987.987 ---> SX     
+
+\++++++++++++
+\ Check IF Sequence Fits Criteria for Reward
+
+\ Z2: Check if Sequence has exactly X presses
+\ delivered within the expected frequency range
+\ If not zero sequence
+\ IF (P>1) [@NthPress, @OneOrZeroPress] included bacause (P/Z) with Z=0 gave a nasty error.
+S.S.10,
+S1,
+#Z2:  SUMARRAY Z = R,1,(X-1); SUMARRAY M = R,1,(P-1);
+      IF (P>1) [@NthPress, @OneOrZeroPress]
+      @NthPress: SHOW 6, FreqSeqHz, (P/M);
+                 IF (P=X) [@EndTrial, @ContTrial]
+                  @EndTrial:  SET P = 0;
+                              SET M = 0;
+                              SET Z = 0;
+                              ZEROARRAY R;
+                              Z1 ---> SX
+                  @ContTrial: SET P = 0;
+                              SET M = 0;
+                              SET Z = 0;
+                              ZEROARRAY R ---> SX
+
+      @OneOrZeroPress:  SHOW 6, FreqSeqHz, 0;
+                   IF (P=1) [@One, @Zero]
+                   @One: SET P = 0;
+                   SET M = 0;
+                   SET Z = 0;
+                   ZEROARRAY R ---> SX
+                   @Zero: ---> SX
+\++++++++++++
+\ Session timer
+
+S.S.11,
+S1,
+ #START: ---> S2
+                                            
+S2,
+ 1": ADD N; SHOW 7, SessionTime, N/60;
+     IF N/60 < O [@True, @False]       
+      @True: IF D >= Q [@MaxRewards, @Continue]
+              @MaxRewards:    ---> S3
+              @Continue:      ---> SX
+      @False: ---> S3
+
+S3,
+
+ 5":  ---> STOPABORTFLUSH
+
+\++++++++++++
+\               TTL to Master8
+
+
+S.S.12,
+S1,
+  #START: ---> S2
+
+S2,
+  #R^CenterLeverBackWall: ON ^TTLLever4 ---> S3
+          
+S3,
+  0.01": OFF ^TTLLever4 ---> S2
+                                          
+                                            
+S.S.13,
+S1,
+  #START: ---> S2
+
+S2,
+  #Z1: ON ^TTLsucrose ---> S3                      
+                                             
+S3,
+  0.01": OFF ^TTLsucrose ---> S2
+
+
+S.S.14,
+S1,
+  #START: ---> S2
+                                                                                                                                             
+S2,
+  #R^Headentry: ON ^TTLHeadentry ---> S3
+
+S3,
+  0.01": OFF ^TTLHeadentry ---> S2
+
+
+S.S.15,
+S1,                                                                                                                                      
+  #START: ---> S2
+
+S2,
+  #R^Lick: ON ^TTLLick ---> S3
+                                                                                      
+S3,
+  0.01": OFF ^TTLLick ---> S2

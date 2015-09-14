@@ -1,0 +1,197 @@
+\ Developed by Fernando J Santos
+
+\ CONSTANTS USED IN THIS PROGRAM
+\ Edit input and output #'s if different for your system
+
+\ Inputs ****************************
+^Lever1 = 1      
+^Headentry = 4
+
+\ Outputs ****************************
+^Pellet     = 5
+^HouseLight = 7
+^Lever1Operate = 1       
+
+
+\ VARIABLES USED IN THIS PROGRAM
+\ A   = Counter for Response Lever #1
+\ C() = IRT Array and Event Pen Code for Soft Cum. Recorder
+\ D   = Reinforcement Counter
+\ F   = Max Number of Reinforcements
+\ I   = Subscript for the IRT Array C.
+\ M   = Session Time in Minutes. Default = 30 minutes
+\ N   = Working Variable for Session Time.
+\ P   = Minimum number of lever-presses
+\ T   = Clock Ticks for IRT's.  Resolution = 0.01 second.
+\ W   = Window of time to perform Lever Presses
+
+Var_Alias Session Time (Min) = M
+
+
+DIM C = 5000  \ Dimension Array C for 5001 data points.
+              \ A maximum of 1,000,000 combined variable
+              \ and array elements are available.  It
+              \ is also possible to FLUSH and append
+              \ data during a session if this limit will
+              \ be exceeded.  See COPYARRAY, ZEROARRAY, and FLUSH.
+
+DIM Q = 1000  \ Lever press count
+
+\ Z-PULSES USED IN THIS PROGRAM
+\ Z1 = Reinforcement Pulse.
+\ Z2 = End of Session Signal.
+
+
+\====================================
+\====================================
+
+S.S.1,
+S1,    
+
+  0.01": SET M = 30, F = 20, P=4, W=0.67 ---> S2
+
+S2,    
+
+  #START: ON ^HouseLight, ^Lever1Operate; ---> S3
+
+  1": SHOW 1,Sess_n,M, 2,Window=,W ---> SX
+
+S3, 
+0.01": SET G=0 ---> S4
+
+S4, 
+#R^Lever1: ADD G; SET Q(G)=T;
+               IF G >= P [@FirstTrue, @FirstFalse] 
+                @FirstTrue:  IF Q(G)-Q(G-P+1) <= W*100 [@SecondTrue, @SecondFalse] 
+                              @SecondTrue: ON^Pellet; Z1; ---> S3
+                              @SecondFalse: ---> S4
+                @FirstFalse: ---> S4
+
+
+#Z2: ---> S5
+
+
+S5,     \ Holding State at End of Session.
+  1': ---> SX
+
+
+\*********************************************
+\      RESPONSE & REINFORCEMENT COUNTERS
+\*********************************************
+
+S.S.2,  \ RESPONSE LEVER #1 COUNTER
+S1,
+  #START: SHOW 3,Lever1,A ---> S2
+
+S2,
+  #R^Lever1: ADD A; SHOW 3,Lever1,A ---> SX
+  #Z2: ---> S1
+
+
+S.S.3,  \ REINFORCEMENT COUNTER
+S1,
+  #START: SHOW 4,Reinforcement,D ---> S2
+
+S2,
+  #Z1: ADD D; SHOW 4,Reinforcement,D ---> SX
+
+
+S.S.4,  \ HEADENTRY COUNTER
+S1,
+  #START: SHOW 5,Headentry,B ---> S2
+
+  S2,
+  #R^Headentry: ADD B; SHOW 5,Headentry,B ---> SX
+  #Z2: ---> S1
+
+
+
+\*********************************************
+\         DISPENSER CONTROL TIMER
+\*********************************************
+
+S.S.5,  \ Time Dispenser output.  If using a dipper,
+        \ grain hopper, or pump requiring additional
+        \ time simply modify the input to State 2.
+S1,
+  #Z1: ---> S2
+
+S2,
+  0.05": OFF ^Pellet ---> S1
+
+
+\***********************************************
+\   INCREMENT TIME T FOR IRT AND EVENT ARRAY
+\***********************************************
+
+S.S.6,
+S1,
+  #START: ---> S2
+
+S2,
+  0.01": ADD T ---> SX
+  #Z2: ---> S1
+
+
+\*****************************************************
+\           SET RESPONSE IRT'S IN ARRAY C
+\*****************************************************
+
+S.S.7,
+S1,
+  #START: ---> S2
+
+S2,
+  #R^Lever1: SET C(I) = T + 0.10, T = 0; ADD I;
+             IF I >= 5000 [@True, @False]
+                @True: ---> S1
+                @False: SET C(I) = -987.987 ---> SX
+  #Z2: ---> S1
+
+S.S.8,
+S1,
+  #START: ---> S2
+
+S2,
+  #R^Headentry: SET C(I) = T + 0.12, T = 0; ADD I;
+             IF I >= 5000 [@True, @False]
+                @True: ---> S1
+                @False: SET C(I) = -987.987 ---> SX
+  #Z2: ---> S1
+
+
+S.S.9, 
+S1,
+  #START: ---> S2
+
+S2,
+  #Z1: SET C(I) = T + 0.20, T = 0; ADD I;
+       IF I >= 5000 [@True, @False]
+          @True: ---> S1
+          @False: SET C(I) = -987.987 ---> SX
+
+
+
+\*********************************************
+\               SESSION CLOCK
+\*********************************************
+S.S.10,
+S1,
+  #START: SHOW 1,Sess_n,N ---> S2
+
+S2,
+  1": ADD N; SHOW 1,Sess_n,N/60;
+      IF (N/60 >= M) OR (D>=F) [@TrueEndSession, @FalseContinueTiming]
+         @End: SET C(I) = T + 0.31, I = I + 1, C(I) = -987.987; Z2 ---> S3
+         @Cont: ---> SX
+
+S3,     
+
+  3": ---> STOPABORTFLUSH                                       
+  
+
+
+
+
+
+
